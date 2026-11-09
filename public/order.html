@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0b0b0e" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Event cinema ( Gole complex) - Instant Seat Food Ordering</title>
+
+  <!-- Google Fonts: Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            cinema: {
+              red: '#E50914',
+              darkRed: '#B20710',
+              bg: '#0b0b0e',
+              surface: '#13131c',
+              border: '#1f1f2e'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body {
+      background-color: #0b0b0e;
+      color: #f3f4f6;
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-[#0b0b0e] text-slate-100 flex justify-center antialiased">
+
+  <!-- Mobile Viewport Container -->
+  <div class="w-full max-w-md min-h-screen bg-[#0d0d12] relative flex flex-col pb-28 border-x border-slate-900 shadow-2xl">
+
+    <!-- HEADER: Brand + Live Seat Status + Cart -->
+    <header class="sticky top-0 z-40 bg-[#0d0d12]/95 backdrop-blur-md border-b border-slate-800/80 px-4 py-3">
+      <div class="flex items-center justify-between gap-2">
+        <!-- Brand & Location -->
+        <div class="flex items-center gap-2.5">
+          <img src="/assets/aistudio/file_00000000e3308246981feffaf116deaa_ae312269.png" alt="Event cinema logo" class="w-10 h-10 rounded-full object-cover border border-slate-700 shadow-md" />
+          <div class="flex flex-col">
+            <span class="text-sm font-bold tracking-tight text-white leading-none">Event cinema</span>
+            <span class="text-[10px] text-slate-400 font-medium tracking-tight mt-0.5">( Gole complex)</span>
+          </div>
+        </div>
+
+        <!-- Top Right: Live Seat Badge + Cart Icon -->
+        <div class="flex items-center gap-2">
+          <button id="seatBadgeBtn" onclick="openSeatModal()" title="Tap to switch seat" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 hover:border-slate-700 active:scale-95 transition-all text-xs font-medium">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span class="text-slate-300 font-semibold tracking-tight text-[11px] truncate max-w-[110px]" id="headerSeatText">Seat F-12</span>
+          </button>
+
+          <button id="cartBtn" onclick="openCheckout()" class="relative p-2 rounded-xl bg-slate-900/90 text-slate-400 border border-slate-800 transition-all active:scale-95" aria-label="Cart">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+            <span id="cartCountBadge" class="hidden absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#E50914] text-white text-[10px] font-black flex items-center justify-center shadow-md">0</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-2.5 flex items-center justify-between text-[11px] text-slate-400 bg-slate-950/60 rounded-lg px-2.5 py-1 border border-slate-900">
+        <span class="flex items-center gap-1 text-slate-300">
+          <span class="text-amber-400">✨</span> Instant In-Seat Delivery
+        </span>
+        <span class="text-emerald-400 font-medium">No App Download Needed</span>
+      </div>
+    </header>
+
+    <!-- ACTIVE ORDER ALERT BANNER (Dynamically shown) -->
+    <div id="activeOrderBanner" class="hidden mx-4 mt-3 p-3 rounded-2xl bg-gradient-to-r from-red-950/40 via-slate-900 to-slate-950 border border-red-900/40 shadow-lg flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-red-600/20 text-[#E50914] flex items-center justify-center font-bold">
+          <svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span id="bannerTicketId" class="text-xs font-bold text-white tracking-wide">Ticket #EC-8492</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-red-900/50 text-red-300 font-semibold">Prep In-Progress</span>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-0.5">
+            Runner arrives in ~<span id="bannerCountdown" class="text-amber-300 font-bold font-mono">4:58</span> to <span id="bannerSeat">Seat F-12</span>
+          </p>
+        </div>
+      </div>
+      <button onclick="openConfirmationModal()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-medium">Ticket</button>
+    </div>
+
+    <!-- MAIN CONCESSION MENU -->
+    <main class="flex-1 px-4 pt-4 space-y-6">
+
+      <!-- SECTION 1: COMBOS FOR YOU -->
+      <section>
+        <div class="mb-3">
+          <div class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-[#E50914]">
+            <span>✦</span>
+            <span>COMBOS FOR YOU</span>
+            <span>✦</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5">Save more with curated cinema combos</p>
+        </div>
+
+        <div class="space-y-3.5" id="combosContainer">
+          <!-- Rendered dynamically by JS -->
+        </div>
+      </section>
+
+      <!-- SECTION 2: YOU MAY ALSO LIKE (Impulse Add-ons) -->
+      <section class="pt-2">
+        <div class="mb-3">
+          <div class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-400">
+            <span>✦</span>
+            <span>YOU MAY ALSO LIKE</span>
+            <span>✦</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5">Quick bites & refreshments for your movie</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3" id="addonsContainer">
+          <!-- Rendered dynamically by JS -->
+        </div>
+      </section>
+
+      <!-- CINEMA BADGES FOOTER -->
+      <footer class="pt-4 pb-8 space-y-4">
+        <div class="grid grid-cols-3 gap-2 py-3 px-2 bg-slate-950/70 rounded-xl border border-slate-900 text-center">
+          <div class="flex flex-col items-center">
+            <span class="text-base">🔒</span>
+            <span class="text-[10px] font-semibold text-slate-300 mt-1">100% Secure</span>
+          </div>
+          <div class="flex flex-col items-center border-x border-slate-800/80 px-1">
+            <span class="text-base">⏱️</span>
+            <span class="text-[10px] font-semibold text-slate-300 mt-1">5-Min Seat Delivery</span>
+          </div>
+          <div class="flex flex-col items-center">
+            <span class="text-base">🍿</span>
+            <span class="text-[10px] font-semibold text-slate-300 mt-1">Freshly Made</span>
+          </div>
+        </div>
+
+        <div class="text-center space-y-1">
+          <p class="text-[11px] text-slate-500">Event cinema ( Gole complex) Concession Stand</p>
+          <p class="text-[10px] text-slate-600">Direct seat service for Screen 1. Delivered without disturbing your movie.</p>
+        </div>
+      </footer>
+    </main>
+
+    <!-- STICKY BOTTOM CART BAR -->
+    <div id="stickyBottomBar" class="hidden fixed bottom-0 left-0 right-0 z-50 flex justify-center p-3 pointer-events-none">
+      <div class="w-full max-w-md pointer-events-auto bg-[#161622]/95 backdrop-blur-xl border border-red-900/50 rounded-2xl p-3 shadow-2xl shadow-black/90 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 pl-1">
+          <div class="w-10 h-10 rounded-xl bg-[#E50914] text-white flex items-center justify-center font-black shadow-md shadow-red-950/60 relative">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+            <span id="bottomBarItemCount" class="absolute -top-1 -right-1 w-4 h-4 bg-white text-[#E50914] rounded-full text-[10px] flex items-center justify-center font-bold">1</span>
+          </div>
+          <div>
+            <div class="flex items-baseline gap-1.5 font-mono">
+              <span id="bottomBarTotal" class="text-xs font-bold text-emerald-400">1 item selected</span>
+            </div>
+            <p class="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+              <span>To:</span>
+              <span id="bottomBarSeat" class="font-bold text-white underline decoration-emerald-500/50">Screen 1, Seat F-12</span>
+            </p>
+          </div>
+        </div>
+
+        <button onclick="openCheckout()" class="px-5 py-3 bg-gradient-to-r from-[#E50914] to-[#c70811] hover:from-[#c70811] hover:to-[#a1070e] active:scale-95 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-red-900/40 flex items-center gap-1.5 shrink-0">
+          <span>Proceed</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- CHECKOUT MODAL (Bottom Sheet) -->
+    <div id="checkoutModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center p-0">
+      <div class="w-full max-w-md bg-[#12121a] rounded-t-3xl border-t border-slate-800 p-5 max-h-[92vh] flex flex-col shadow-2xl overflow-y-auto">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div class="flex items-center gap-2">
+            <div class="w-2.5 h-2.5 rounded-full bg-[#E50914]"></div>
+            <h3 class="text-base font-bold text-white">Confirm Cinema Order</h3>
+          </div>
+          <button onclick="closeCheckout()" class="w-8 h-8 rounded-full bg-slate-900 text-slate-400 hover:text-white flex items-center justify-center">✕</button>
+        </div>
+
+        <!-- Seat Confirmation Banner -->
+        <div class="my-3.5 p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">📍</div>
+            <div>
+              <span class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Delivery Destination</span>
+              <p class="text-sm font-bold text-white" id="modalDeliverySeat">Screen 1 • <span class="text-[#E50914]">Seat F-12</span></p>
+            </div>
+          </div>
+          <button onclick="openSeatModal()" class="text-xs text-slate-400 hover:text-slate-200 underline">Change</button>
+        </div>
+
+        <!-- Items Breakdown -->
+        <div class="space-y-2.5 my-2">
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Items in Order</span>
+          <div id="modalCartItems" class="space-y-2 divide-y divide-slate-800/60"></div>
+        </div>
+
+        <!-- Payment Method Options -->
+        <div class="my-4 space-y-2">
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Verification / Payment</span>
+
+          <!-- Fonepay QR -->
+          <label class="flex items-start gap-3 p-3 rounded-xl border border-[#E50914] bg-red-950/30 text-white cursor-pointer" id="optFonepayLabel">
+            <input type="radio" name="payOption" value="fonepay" checked onchange="handlePaymentChange('fonepay')" class="mt-0.5 text-[#E50914]" />
+            <div class="flex-1">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-white flex items-center gap-1.5">📱 Fonepay / Mobile Banking QR</span>
+                <span class="text-[9px] bg-red-900/60 text-red-300 px-1.5 py-0.5 rounded font-bold">RECOMMENDED</span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-1 leading-snug">Instant scan & pay at seat.</p>
+            </div>
+          </label>
+
+          <!-- Cash On Delivery -->
+          <label class="flex items-start gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950/60 text-slate-400 cursor-pointer" id="optCashLabel">
+            <input type="radio" name="payOption" value="cash" onchange="handlePaymentChange('cash')" class="mt-0.5 text-[#E50914]" />
+            <div class="flex-1">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">💵 Pay Cash on Seat Delivery</span>
+              <p class="text-[11px] text-slate-400 mt-1 leading-snug">Pay runner at your seat.</p>
+            </div>
+          </label>
+        </div>
+
+        <!-- Notes -->
+        <div class="mb-4">
+          <label class="text-[11px] text-slate-400 font-medium block mb-1">Canteen Note (Optional)</label>
+          <input id="orderNoteInput" type="text" placeholder="e.g., Less ice in coke, extra tissues" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#E50914]" />
+        </div>
+
+        <!-- Summary & Confirmation -->
+        <div class="pt-3 border-t border-slate-800/80 space-y-3">
+          <div class="flex items-center justify-between text-xs text-slate-400">
+            <span>Seat Delivery Charge</span>
+            <span class="text-emerald-400 font-bold">FREE (0.00)</span>
+          </div>
+
+          <button onclick="submitOrder()" class="w-full py-3.5 bg-gradient-to-r from-[#E50914] to-[#B20710] hover:from-[#c70811] hover:to-[#96060c] active:scale-[0.98] text-white font-extrabold text-sm uppercase tracking-wider rounded-xl transition-all shadow-xl shadow-red-950/60 flex items-center justify-center gap-2">
+            <span>🍿</span>
+            <span>Confirm & Send to Canteen</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUCCESS / DELIVERY TICKET OVERLAY -->
+    <div id="confirmationOverlay" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="w-full max-w-sm bg-[#13131d] border border-slate-800 rounded-3xl p-5 shadow-2xl relative text-center">
+        <button onclick="closeConfirmation()" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-900 text-slate-400 hover:text-white flex items-center justify-center">✕</button>
+
+        <div class="mx-auto w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-3 shadow-lg shadow-emerald-950/50">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        </div>
+
+        <span class="text-[11px] font-bold text-emerald-400 uppercase tracking-widest">Order Received by Canteen</span>
+        <h2 class="text-xl font-black text-white mt-0.5">Delivering to Your Seat!</h2>
+
+        <!-- Cinema Ticket Card -->
+        <div class="my-4 p-4 rounded-2xl bg-slate-950 border border-dashed border-slate-800 text-left space-y-3 relative overflow-hidden">
+          <div class="absolute -left-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#13131d]"></div>
+          <div class="absolute -right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#13131d]"></div>
+
+          <div class="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+            <div>
+              <span class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">TICKET ID</span>
+              <p id="ticketIdDisplay" class="font-mono text-sm font-black text-white">#EC-8492</p>
+            </div>
+            <div class="text-right">
+              <span class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">TARGET SEAT</span>
+              <p id="ticketSeatDisplay" class="text-sm font-black text-[#E50914]">Screen 1 • Seat F-12</p>
+            </div>
+          </div>
+
+          <div id="ticketItemsList" class="space-y-1 text-xs text-slate-300"></div>
+
+          <!-- Countdown -->
+          <div class="pt-2.5 border-t border-slate-800/80">
+            <div class="flex items-center justify-between text-[11px] mb-1.5">
+              <span class="text-slate-400">Estimated Delivery:</span>
+              <span id="ticketCountdown" class="font-mono text-amber-400 font-extrabold text-xs">5:00 mins</span>
+            </div>
+            <div class="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+              <div id="ticketProgressBar" class="bg-gradient-to-r from-amber-500 to-emerald-500 h-full w-[12%] transition-all duration-1000"></div>
+            </div>
+            <p class="text-[10px] text-slate-500 mt-1.5 text-center">
+              Canteen runner is quietly bringing items to <span id="ticketFooterSeat" class="text-slate-300 font-semibold">Seat F-12</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-center gap-2 mb-4">
+          <button onclick="playChime()" class="px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] text-slate-400 hover:text-slate-200 flex items-center gap-1.5">
+            <span>🔊 Replay Canteen Chime</span>
+          </button>
+        </div>
+
+        <button onclick="closeConfirmation()" class="w-full py-3 bg-[#E50914] hover:bg-[#c70811] text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg">
+          Back to Concession Menu
+        </button>
+      </div>
+    </div>
+
+    <!-- SEAT MODAL (Selector / Tester) -->
+    <div id="seatModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div class="w-full max-w-xs bg-[#14141f] border border-slate-800 rounded-2xl p-4 shadow-2xl">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-sm font-bold text-white flex items-center gap-1.5">
+            <span>📍</span> Change Cinema Seat
+          </h4>
+          <button onclick="closeSeatModal()" class="text-slate-400 hover:text-white">✕</button>
+        </div>
+        <p class="text-[11px] text-slate-400 mb-3">
+          Usually extracted from physical QR code (?seat=F-12). Test with presets:
+        </p>
+        <div class="grid grid-cols-4 gap-1.5 mb-3">
+          <button onclick="selectSeat('F-12')" class="py-1.5 text-xs font-mono font-bold rounded-lg border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700">F-12</button>
+          <button onclick="selectSeat('G-08')" class="py-1.5 text-xs font-mono font-bold rounded-lg border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700">G-08</button>
+          <button onclick="selectSeat('E-04')" class="py-1.5 text-xs font-mono font-bold rounded-lg border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700">E-04</button>
+          <button onclick="selectSeat('D-11')" class="py-1.5 text-xs font-mono font-bold rounded-lg border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700">D-11</button>
+          <button onclick="selectSeat('A-01')" class="py-1.5 text-xs font-mono font-bold rounded-lg border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700">A-01</button>
+          <button onclick="selectSeat('B-06')" class="py-1.5 text-xs font-mono font-bold rounded-lg border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700">B-06</button>
+          <button onclick="selectSeat('VIP-1')" class="py-1.5 text-xs font-mono font-bold rounded-lg border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700">VIP-1</button>
+          <button onclick="selectSeat('VIP-2')" class="py-1.5 text-xs font-mono font-bold rounded-lg border bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700">VIP-2</button>
+        </div>
+        <div class="space-y-2">
+          <input id="customSeatInput" type="text" placeholder="Or type seat (e.g. F-12)" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#E50914] uppercase font-mono font-bold" />
+          <button onclick="saveCustomSeat()" class="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl">Save Seat</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Vanilla JavaScript Logic -->
+  <script>
+    // 1. DATA DEFINITIONS (Prices removed)
+    const COMBOS = [
+      {
+        id: 'super_combo',
+        name: 'Super Combo',
+        desc: 'Popcorn L, 2x Coke L, Nachos with Warm Cheese Dip',
+        badge: 'BEST VALUE',
+        badgeColor: 'bg-[#E50914] text-white',
+        image: 'https://images.unsplash.com/photo-1585647347384-2593bc35786b?auto=format&fit=crop&w=700&q=80'
+      },
+      {
+        id: 'couple_combo',
+        name: 'Couple Combo',
+        desc: 'Popcorn L & 2x Ice-Cold Coke L (Cinema Special)',
+        badge: 'POPULAR',
+        badgeColor: 'bg-amber-500 text-slate-950 font-black',
+        image: 'https://images.unsplash.com/photo-1578849278619-e73505e9610f?auto=format&fit=crop&w=700&q=80'
+      },
+      {
+        id: 'snack_combo',
+        name: 'Snack Combo',
+        desc: 'Popcorn R, Coke R, Crispy Chicken/Paneer Roll',
+        badge: 'SAVE 20%',
+        badgeColor: 'bg-emerald-500 text-slate-950 font-black',
+        image: 'https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?auto=format&fit=crop&w=700&q=80'
+      }
+    ];
+
+    const ADDONS = [
+      {
+        id: 'addon_nachos',
+        name: 'Cheese Nachos',
+        desc: 'Crispy corn tortilla with hot jalapeño cheddar sauce',
+        image: 'https://images.unsplash.com/photo-1513456852971-30c0b8199d4d?auto=format&fit=crop&w=600&q=80'
+      },
+      {
+        id: 'addon_coffee',
+        name: 'Cold Coffee',
+        desc: 'Chilled espresso latte with creamy whipped layer',
+        image: 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?auto=format&fit=crop&w=600&q=80'
+      },
+      {
+        id: 'addon_fries',
+        name: 'Peri Peri Fries',
+        desc: 'Skin-on golden fries shaken with spicy peri peri dust',
+        image: 'https://images.unsplash.com/photo-1576107232684-1279f3908594?auto=format&fit=crop&w=600&q=80'
+      },
+      {
+        id: 'addon_brownie',
+        name: 'Choco Brownie',
+        desc: 'Warm dark chocolate fudge slice with walnut crunch',
+        image: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=600&q=80'
+      }
+    ];
+
+    const ALL_ITEMS = [...COMBOS, ...ADDONS];
+
+    // State
+    let currentSeat = 'Seat F-12';
+    let cart = {}; // { [id]: quantity }
+    let paymentMethod = 'fonepay';
+    let activeOrder = null;
+    let countdownInterval = null;
+
+    // 2. DYNAMIC URL SEAT EXTRACTION
+    function initSeatFromURL() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const seatParam = params.get('seat');
+        if (seatParam && seatParam.trim().length > 0) {
+          const clean = seatParam.trim();
+          currentSeat = clean.toLowerCase().startsWith('seat') ? clean : 'Seat ' + clean.toUpperCase();
+        } else {
+          currentSeat = 'Seat F-12';
+        }
+      } catch (e) {
+        currentSeat = 'Seat F-12';
+      }
+      updateSeatUI();
+    }
+
+    function updateSeatUI() {
+      document.getElementById('headerSeatText').textContent = currentSeat;
+      document.getElementById('bottomBarSeat').textContent = 'Screen 1, ' + currentSeat;
+      document.getElementById('modalDeliverySeat').innerHTML = 'Screen 1 • <span class="text-[#E50914]">' + currentSeat + '</span>';
+      if (activeOrder) {
+        document.getElementById('bannerSeat').textContent = currentSeat;
+        document.getElementById('ticketSeatDisplay').textContent = 'Screen 1 • ' + currentSeat;
+        document.getElementById('ticketFooterSeat').textContent = currentSeat;
+      }
+    }
+
+    // 3. SOUND SYNTHESIS VIA WEB AUDIO API
+    function playChime() {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+
+        const notes = [
+          { freq: 523.25, time: 0 },
+          { freq: 659.25, time: 0.12 },
+          { freq: 783.99, time: 0.24 },
+          { freq: 1046.50, time: 0.38 }
+        ];
+
+        notes.forEach(note => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(note.freq, ctx.currentTime + note.time);
+
+          gain.gain.setValueAtTime(0, ctx.currentTime + note.time);
+          gain.gain.linearRampToValueAtTime(0.22, ctx.currentTime + note.time + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + note.time + 0.45);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(ctx.currentTime + note.time);
+          osc.stop(ctx.currentTime + note.time + 0.5);
+        });
+      } catch (e) {
+        console.warn('Audio play restricted');
+      }
+    }
+
+    // 4. CART OPERATIONS
+    function addItem(id) {
+      cart[id] = (cart[id] || 0) + 1;
+      renderMenu();
+      updateCartBar();
+    }
+
+    function removeItem(id) {
+      if (!cart[id]) return;
+      cart[id] -= 1;
+      if (cart[id] <= 0) delete cart[id];
+      renderMenu();
+      updateCartBar();
+      if (!document.getElementById('checkoutModal').classList.contains('hidden')) {
+        renderModalItems();
+      }
+    }
+
+    function getCartTotalCount() {
+      return Object.values(cart).reduce((a, b) => a + b, 0);
+    }
+
+    function updateCartBar() {
+      const count = getCartTotalCount();
+      const sticky = document.getElementById('stickyBottomBar');
+      const badge = document.getElementById('cartCountBadge');
+      const cartBtn = document.getElementById('cartBtn');
+
+      if (count > 0) {
+        sticky.classList.remove('hidden');
+        badge.classList.remove('hidden');
+        badge.textContent = count;
+        cartBtn.className = 'relative p-2 rounded-xl bg-[#E50914] text-white shadow-lg shadow-red-900/40 active:scale-95 transition-all';
+        document.getElementById('bottomBarItemCount').textContent = count;
+        document.getElementById('bottomBarTotal').textContent = count + (count === 1 ? ' item selected' : ' items selected');
+      } else {
+        sticky.classList.add('hidden');
+        badge.classList.add('hidden');
+        cartBtn.className = 'relative p-2 rounded-xl bg-slate-900/90 text-slate-400 border border-slate-800 transition-all active:scale-95';
+        closeCheckout();
+      }
+    }
+
+    // 5. RENDER MENU CARDS
+    function renderMenu() {
+      // Combos
+      const combosEl = document.getElementById('combosContainer');
+      combosEl.innerHTML = COMBOS.map(c => {
+        const qty = cart[c.id] || 0;
+        return `
+          <div class="bg-[#13131c] rounded-2xl border border-slate-800/80 overflow-hidden shadow-lg flex flex-col">
+            <div class="relative aspect-[16/9] w-full overflow-hidden bg-slate-900">
+              <img src="${c.image}" alt="${c.name}" class="w-full h-full object-cover" loading="lazy" />
+              <div class="absolute inset-0 bg-gradient-to-t from-[#13131c] via-black/20 to-transparent"></div>
+              <div class="absolute top-2.5 left-2.5">
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider shadow-md ${c.badgeColor}">
+                  ${c.badge}
+                </span>
+              </div>
+              <div class="absolute bottom-2 left-2.5 flex items-center gap-1 text-[10px] font-medium text-slate-300 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded-full border border-white/10">
+                <span>⏱️ Ready in 5 mins</span>
+              </div>
+            </div>
+
+            <div class="p-3.5 flex flex-col justify-between flex-1">
+              <div>
+                <h3 class="text-base font-bold text-white tracking-tight">${c.name}</h3>
+                <p class="text-xs text-slate-400 mt-1 line-clamp-2">${c.desc}</p>
+              </div>
+
+              <div class="flex items-center justify-end pt-3 mt-3 border-t border-slate-800/60">
+                ${qty === 0 ? `
+                  <button onclick="addItem('${c.id}')" class="px-4 py-2 bg-[#E50914] hover:bg-[#c70811] active:scale-95 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center gap-1">
+                    <span>+ ADD</span>
+                  </button>
+                ` : `
+                  <div class="flex items-center gap-2 bg-slate-900 border border-slate-700/80 rounded-xl p-0.5">
+                    <button onclick="removeItem('${c.id}')" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-200 flex items-center justify-center hover:bg-slate-700 active:scale-90">-</button>
+                    <span class="font-mono text-sm font-bold text-white px-1 w-5 text-center">${qty}</span>
+                    <button onclick="addItem('${c.id}')" class="w-7 h-7 rounded-lg bg-[#E50914] text-white flex items-center justify-center hover:bg-[#c70811] active:scale-90">+</button>
+                  </div>
+                `}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Addons
+      const addonsEl = document.getElementById('addonsContainer');
+      addonsEl.innerHTML = ADDONS.map(a => {
+        const qty = cart[a.id] || 0;
+        return `
+          <div class="bg-[#13131c] rounded-2xl border border-slate-800/80 overflow-hidden flex flex-col justify-between shadow-md">
+            <div class="relative aspect-[4/3] w-full bg-slate-900 overflow-hidden">
+              <img src="${a.image}" alt="${a.name}" class="w-full h-full object-cover" loading="lazy" />
+              <div class="absolute inset-0 bg-gradient-to-t from-[#13131c] via-black/20 to-transparent"></div>
+            </div>
+
+            <div class="p-3 flex flex-col flex-1 justify-between">
+              <div>
+                <h4 class="text-sm font-bold text-white tracking-tight truncate">${a.name}</h4>
+                <p class="text-[11px] text-slate-400 mt-0.5 line-clamp-1">${a.desc}</p>
+              </div>
+
+              <div class="flex items-center justify-end pt-2.5 mt-2 border-t border-slate-800/60">
+                ${qty === 0 ? `
+                  <button onclick="addItem('${a.id}')" class="px-2.5 py-1 bg-slate-800 hover:bg-[#E50914] text-slate-200 hover:text-white font-bold text-[11px] rounded-lg transition-all active:scale-95 flex items-center gap-1">
+                    <span>+ ADD</span>
+                  </button>
+                ` : `
+                  <div class="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg p-0.5">
+                    <button onclick="removeItem('${a.id}')" class="w-6 h-6 rounded bg-slate-800 text-slate-300 flex items-center justify-center">-</button>
+                    <span class="font-mono text-xs font-bold text-white px-0.5">${qty}</span>
+                    <button onclick="addItem('${a.id}')" class="w-6 h-6 rounded bg-[#E50914] text-white flex items-center justify-center">+</button>
+                  </div>
+                `}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 6. CHECKOUT MODAL
+    function openCheckout() {
+      if (getCartTotalCount() === 0) return;
+      renderModalItems();
+      document.getElementById('checkoutModal').classList.remove('hidden');
+    }
+
+    function closeCheckout() {
+      document.getElementById('checkoutModal').classList.add('hidden');
+    }
+
+    function renderModalItems() {
+      const container = document.getElementById('modalCartItems');
+      const items = Object.entries(cart).map(([id, qty]) => ({
+        item: ALL_ITEMS.find(x => x.id === id),
+        qty
+      })).filter(x => x.item);
+
+      container.innerHTML = items.map(({ item, qty }) => `
+        <div class="pt-2 flex items-center justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-bold text-white truncate">${item.name}</p>
+            <p class="text-[11px] text-slate-400 font-mono">Qty: ${qty}</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-lg p-0.5">
+              <button onclick="removeItem('${item.id}')" class="w-5 h-5 rounded bg-slate-800 text-slate-300 flex items-center justify-center hover:bg-slate-700">-</button>
+              <span class="font-mono text-xs font-bold text-white px-1">${qty}</span>
+              <button onclick="addItem('${item.id}')" class="w-5 h-5 rounded bg-[#E50914] text-white flex items-center justify-center hover:bg-red-700">+</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function handlePaymentChange(method) {
+      paymentMethod = method;
+      const fLabel = document.getElementById('optFonepayLabel');
+      const cLabel = document.getElementById('optCashLabel');
+
+      if (method === 'fonepay') {
+        fLabel.className = 'flex items-start gap-3 p-3 rounded-xl border border-[#E50914] bg-red-950/30 text-white cursor-pointer';
+        cLabel.className = 'flex items-start gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950/60 text-slate-400 cursor-pointer';
+      } else {
+        cLabel.className = 'flex items-start gap-3 p-3 rounded-xl border border-[#E50914] bg-red-950/30 text-white cursor-pointer';
+        fLabel.className = 'flex items-start gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950/60 text-slate-400 cursor-pointer';
+      }
+    }
+
+    // 7. ORDER CONFIRMATION
+    function submitOrder() {
+      if (getCartTotalCount() === 0) return;
+      playChime();
+
+      const orderNumber = Math.floor(1000 + Math.random() * 9000);
+      const itemsList = Object.entries(cart).map(([id, qty]) => ({
+        item: ALL_ITEMS.find(x => x.id === id),
+        qty
+      })).filter(x => x.item);
+
+      activeOrder = {
+        id: '#EC-' + orderNumber,
+        seat: currentSeat,
+        items: itemsList,
+        timeRemaining: 300 // 5 minutes
+      };
+
+      cart = {};
+      renderMenu();
+      updateCartBar();
+      closeCheckout();
+
+      document.getElementById('bannerTicketId').textContent = 'Ticket ' + activeOrder.id;
+      document.getElementById('bannerSeat').textContent = activeOrder.seat;
+      document.getElementById('activeOrderBanner').classList.remove('hidden');
+
+      document.getElementById('ticketIdDisplay').textContent = activeOrder.id;
+      document.getElementById('ticketSeatDisplay').textContent = 'Screen 1 • ' + activeOrder.seat;
+      document.getElementById('ticketFooterSeat').textContent = activeOrder.seat;
+
+      document.getElementById('ticketItemsList').innerHTML = itemsList.map(({ item, qty }) => `
+        <div class="flex justify-between">
+          <span>${qty}x ${item.name}</span>
+          <span class="text-slate-400 font-mono">Ordered</span>
+        </div>
+      `).join('');
+
+      openConfirmationModal();
+
+      if (countdownInterval) clearInterval(countdownInterval);
+      countdownInterval = setInterval(() => {
+        if (!activeOrder || activeOrder.timeRemaining <= 0) {
+          clearInterval(countdownInterval);
+          return;
+        }
+        activeOrder.timeRemaining -= 1;
+        const m = Math.floor(activeOrder.timeRemaining / 60);
+        const s = activeOrder.timeRemaining % 60;
+        const formatted = `${m}:${s < 10 ? '0' : ''}${s}`;
+        document.getElementById('ticketCountdown').textContent = formatted + ' mins';
+        document.getElementById('bannerCountdown').textContent = formatted;
+
+        const progressPercent = Math.max(10, ((300 - activeOrder.timeRemaining) / 300) * 100);
+        document.getElementById('ticketProgressBar').style.width = progressPercent + '%';
+      }, 1000);
+    }
+
+    function openConfirmationModal() {
+      document.getElementById('confirmationOverlay').classList.remove('hidden');
+    }
+
+    function closeConfirmation() {
+      document.getElementById('confirmationOverlay').classList.add('hidden');
+    }
+
+    // 8. SEAT SWITCHER
+    function openSeatModal() {
+      document.getElementById('seatModal').classList.remove('hidden');
+    }
+
+    function closeSeatModal() {
+      document.getElementById('seatModal').classList.add('hidden');
+    }
+
+    function selectSeat(seatCode) {
+      currentSeat = 'Seat ' + seatCode;
+      updateSeatUI();
+      closeSeatModal();
+    }
+
+    function saveCustomSeat() {
+      const val = document.getElementById('customSeatInput').value.trim();
+      if (val) {
+        currentSeat = val.toUpperCase().startsWith('SEAT') ? val.toUpperCase() : 'Seat ' + val.toUpperCase();
+        updateSeatUI();
+      }
+      closeSeatModal();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initSeatFromURL();
+      renderMenu();
+    });
+  </script>
+</body>
+</html>

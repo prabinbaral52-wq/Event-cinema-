@@ -1,0 +1,6 @@
+{
+  "name": "Event Cinemas - Instant Seat Food Ordering",
+  "description": "Instant in-seat QR food and beverage ordering mobile web app for Event Cinemas, Lalbandi-7, Sarlahi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
