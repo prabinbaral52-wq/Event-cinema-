@@ -19,6 +19,9 @@ import {
   Volume2,
   QrCode
 } from 'lucide-react';
+import { ref, push, set } from 'firebase/database';
+import { db } from './firebase';
+
 
 // High-fidelity generated imagery
 import superComboImg from './assets/images/super_combo_popcorn_nachos_1794148566116.jpg';
