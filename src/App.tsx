@@ -21,8 +21,9 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react';
+import { push, ref, set } from 'firebase/database';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
-import { canteenDb, handleFirestoreError, OperationType } from './firebase';
+import { canteenDb, handleFirestoreError, OperationType, rtdb } from './firebase';
 
 // High-fidelity generated imagery
 import superComboImg from './assets/images/super_combo_popcorn_nachos_1794148566116.jpg';
@@ -242,7 +243,8 @@ export default function App() {
       .replace(/[^a-zA-Z0-9-]/g, '')
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '')
-      .slice(0, 16);
+      .slice(0, 16)
+      .toUpperCase();
     return cleaned.length > 0 ? cleaned : 'F-12';
   };
 
@@ -267,22 +269,37 @@ export default function App() {
 
     const orderPath = `orders/${docId}`;
 
+    const baseOrderPayload = {
+      orderCode,
+      seat: firestoreSeat,
+      hall: 'Hall 1 / Screen 1',
+      items: canteenItems,
+      paymentType: paymentMethod === 'fonepay' ? 'digital' : 'cash',
+      totalAmount: 0,
+      status: 'new',
+      source: 'customer_qr',
+    };
+
     try {
       try {
         await setDoc(doc(canteenDb, 'orders', docId), {
-          orderCode,
-          seat: firestoreSeat,
-          hall: 'Hall 1 / Screen 1',
-          items: canteenItems,
-          paymentType: paymentMethod === 'fonepay' ? 'digital' : 'cash',
-          totalAmount: 0,
-          status: 'new',
-          source: 'customer_qr',
+          ...baseOrderPayload,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, orderPath);
+      } catch (firestoreErr) {
+        try {
+          handleFirestoreError(firestoreErr, OperationType.CREATE, orderPath);
+        } catch {
+          // Automatic Realtime Database fallback if Cloud Firestore write fails
+          const rtdbOrderRef = push(ref(rtdb, 'orders'));
+          const nowMs = Date.now();
+          await set(rtdbOrderRef, {
+            ...baseOrderPayload,
+            createdAt: nowMs,
+            updatedAt: nowMs,
+          });
+        }
       }
 
       playCanteenChime();

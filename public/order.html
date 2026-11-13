@@ -366,6 +366,12 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
     import {
+      getDatabase,
+      ref,
+      push,
+      set
+    } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js';
+    import {
       getFirestore,
       doc,
       setDoc,
@@ -379,12 +385,14 @@
       apiKey: 'AIzaSyCXeMq_bJ2IxXqoAT1Z4azf-rqxuJIPdYU',
       authDomain: 'event-cinema.firebaseapp.com',
       firestoreDatabaseId: 'ai-studio-lalbandicinemaki-53df80ea-0bab-4f2c-a1a4-e67fee2366ed',
+      databaseURL: 'https://event-cinema-default-rtdb.asia-southeast1.firebasedatabase.app',
       storageBucket: 'event-cinema.firebasestorage.app',
       messagingSenderId: '670709095482'
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    const rtdb = getDatabase(app, firebaseConfig.databaseURL);
 
     function handleFirestoreError(error, operationType, path) {
       const errInfo = {
@@ -725,7 +733,8 @@
         .replace(/[^a-zA-Z0-9-]/g, '')
         .replace(/-+/g, '-')
         .replace(/^-|-$/g, '')
-        .slice(0, 16) || 'F-12';
+        .slice(0, 16)
+        .toUpperCase() || 'F-12';
       const noteInput = document.getElementById('orderNoteInput');
       const cleanNote = (noteInput ? noteInput.value : '').trim().slice(0, 60);
 
@@ -741,22 +750,36 @@
       }));
       const orderPath = 'orders/' + docId;
 
+      const baseOrderPayload = {
+        orderCode,
+        seat: cleanSeat,
+        hall: 'Hall 1 / Screen 1',
+        items: canteenItems,
+        paymentType: paymentMethod === 'fonepay' ? 'digital' : 'cash',
+        totalAmount: 0,
+        status: 'new',
+        source: 'customer_qr'
+      };
+
       try {
         try {
           await setDoc(doc(db, 'orders', docId), {
-            orderCode,
-            seat: cleanSeat,
-            hall: 'Hall 1 / Screen 1',
-            items: canteenItems,
-            paymentType: paymentMethod === 'fonepay' ? 'digital' : 'cash',
-            totalAmount: 0,
-            status: 'new',
-            source: 'customer_qr',
+            ...baseOrderPayload,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
           });
         } catch (err) {
-          handleFirestoreError(err, 'create', orderPath);
+          try {
+            handleFirestoreError(err, 'create', orderPath);
+          } catch {
+            const rtdbOrderRef = push(ref(rtdb, 'orders'));
+            const nowMs = Date.now();
+            await set(rtdbOrderRef, {
+              ...baseOrderPayload,
+              createdAt: nowMs,
+              updatedAt: nowMs
+            });
+          }
         }
 
         window.playChime();

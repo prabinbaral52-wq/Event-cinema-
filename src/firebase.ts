@@ -1,14 +1,18 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { getDatabase } from 'firebase/database';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 export const CANTEEN_DATABASE_ID =
   'ai-studio-lalbandicinemaki-53df80ea-0bab-4f2c-a1a4-e67fee2366ed';
+export const CANTEEN_RTDB_URL =
+  'https://event-cinema-default-rtdb.asia-southeast1.firebasedatabase.app';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const canteenDb = getFirestore(app, CANTEEN_DATABASE_ID);
+export const rtdb = getDatabase(app, CANTEEN_RTDB_URL);
 export const auth = getAuth(app);
 
 export enum OperationType {
