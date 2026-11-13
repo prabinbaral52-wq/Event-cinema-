@@ -1,0 +1,84 @@
+{
+  "entities": {
+    "Order": {
+      "title": "Order",
+      "description": "In-seat cinema concession order placed by a customer and sent to the canteen receiver.",
+      "type": "object",
+      "properties": {
+        "ticketId": {
+          "type": "string",
+          "description": "Short display ticket code shown to customer and canteen (e.g. EC-4821)",
+          "minLength": 7,
+          "maxLength": 7,
+          "pattern": "^EC-[0-9]{4}$"
+        },
+        "seat": {
+          "type": "string",
+          "description": "Cinema seat identifier extracted from QR code or seat selector",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9 _-]+$"
+        },
+        "screen": {
+          "type": "string",
+          "description": "Auditorium screen identifier",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "items": {
+          "type": "array",
+          "description": "Bounded list (1 to 10 entries) of ordered concession items with id, name, and quantity"
+        },
+        "itemCount": {
+          "type": "integer",
+          "description": "Total item quantity across all line items (1 to 200)"
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "Customer chosen payment method at seat",
+          "enum": ["fonepay", "cash"]
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional special preparation instructions for the canteen",
+          "maxLength": 200
+        },
+        "status": {
+          "type": "string",
+          "description": "Order fulfillment lifecycle state",
+          "enum": ["pending", "preparing", "delivered", "cancelled"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when order was created"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when order was last updated"
+        }
+      },
+      "required": [
+        "ticketId",
+        "seat",
+        "screen",
+        "items",
+        "itemCount",
+        "paymentMethod",
+        "note",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/orders/{orderId}": {
+      "schema": {
+        "$ref": "#/entities/Order"
+      },
+      "description": "Real-time cinema concession orders created by the Customer App (sender) and received by the Canteen App (receiver)."
+    }
+  }
+}

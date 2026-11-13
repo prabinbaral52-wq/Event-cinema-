@@ -254,8 +254,10 @@
         <!-- Notes -->
         <div class="mb-4">
           <label class="text-[11px] text-slate-400 font-medium block mb-1">Canteen Note (Optional)</label>
-          <input id="orderNoteInput" type="text" placeholder="e.g., Less ice in coke, extra tissues" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#E50914]" />
+          <input id="orderNoteInput" type="text" maxlength="200" placeholder="e.g., Less ice in coke, extra tissues" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#E50914]" />
         </div>
+
+        <div id="submitErrorBox" class="hidden mb-3 p-2.5 rounded-xl bg-red-950/60 border border-red-800/70 text-red-200 text-xs"></div>
 
         <!-- Summary & Confirmation -->
         <div class="pt-3 border-t border-slate-800/80 space-y-3">
@@ -264,9 +266,9 @@
             <span class="text-emerald-400 font-bold">FREE (0.00)</span>
           </div>
 
-          <button onclick="submitOrder()" class="w-full py-3.5 bg-gradient-to-r from-[#E50914] to-[#B20710] hover:from-[#c70811] hover:to-[#96060c] active:scale-[0.98] text-white font-extrabold text-sm uppercase tracking-wider rounded-xl transition-all shadow-xl shadow-red-950/60 flex items-center justify-center gap-2">
+          <button id="confirmOrderBtn" onclick="submitOrder()" class="w-full py-3.5 bg-gradient-to-r from-[#E50914] to-[#B20710] hover:from-[#c70811] hover:to-[#96060c] disabled:opacity-60 active:scale-[0.98] text-white font-extrabold text-sm uppercase tracking-wider rounded-xl transition-all shadow-xl shadow-red-950/60 flex items-center justify-center gap-2">
             <span>🍿</span>
-            <span>Confirm & Send to Canteen</span>
+            <span id="confirmOrderBtnText">Confirm & Send to Canteen</span>
           </button>
         </div>
       </div>
@@ -360,8 +362,48 @@
 
   </div>
 
-  <!-- Vanilla JavaScript Logic -->
-  <script>
+  <!-- Firebase + App Logic -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+    import {
+      getFirestore,
+      doc,
+      setDoc,
+      getDocFromServer,
+      onSnapshot,
+      serverTimestamp
+    } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+    const firebaseConfig = {
+      projectId: 'event-cinema',
+      appId: '1:670709095482:web:653f39e889390cdf95a903',
+      apiKey: 'AIzaSyCXeMq_bJ2IxXqoAT1Z4azf-rqxuJIPdYU',
+      authDomain: 'event-cinema.firebaseapp.com',
+      firestoreDatabaseId: 'ai-studio-eventcinemaslalb-5582b044-f3d4-4a51-b51b-e87f58413c06',
+      storageBucket: 'event-cinema.firebasestorage.app',
+      messagingSenderId: '670709095482'
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+    function handleFirestoreError(error, operationType, path) {
+      const errInfo = {
+        error: error instanceof Error ? error.message : String(error),
+        operationType,
+        path,
+        authInfo: {}
+      };
+      console.error('Firestore Error: ', JSON.stringify(errInfo));
+      throw new Error(JSON.stringify(errInfo));
+    }
+
+    getDocFromServer(doc(db, 'test', 'connection')).catch((error) => {
+      if (error instanceof Error && error.message.includes('the client is offline')) {
+        console.error('Please check your Firebase configuration.');
+      }
+    });
+
     // 1. DATA DEFINITIONS (Prices removed)
     const COMBOS = [
       {
@@ -425,6 +467,8 @@
     let paymentMethod = 'fonepay';
     let activeOrder = null;
     let countdownInterval = null;
+    let activeOrderUnsubscribe = null;
+    let isSubmitting = false;
 
     // 2. DYNAMIC URL SEAT EXTRACTION
     function initSeatFromURL() {
@@ -455,7 +499,7 @@
     }
 
     // 3. SOUND SYNTHESIS VIA WEB AUDIO API
-    function playChime() {
+    window.playChime = function playChime() {
       try {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         if (!AudioContext) return;
@@ -487,16 +531,16 @@
       } catch (e) {
         console.warn('Audio play restricted');
       }
-    }
+    };
 
     // 4. CART OPERATIONS
-    function addItem(id) {
+    window.addItem = function addItem(id) {
       cart[id] = (cart[id] || 0) + 1;
       renderMenu();
       updateCartBar();
-    }
+    };
 
-    function removeItem(id) {
+    window.removeItem = function removeItem(id) {
       if (!cart[id]) return;
       cart[id] -= 1;
       if (cart[id] <= 0) delete cart[id];
@@ -505,7 +549,7 @@
       if (!document.getElementById('checkoutModal').classList.contains('hidden')) {
         renderModalItems();
       }
-    }
+    };
 
     function getCartTotalCount() {
       return Object.values(cart).reduce((a, b) => a + b, 0);
@@ -528,13 +572,12 @@
         sticky.classList.add('hidden');
         badge.classList.add('hidden');
         cartBtn.className = 'relative p-2 rounded-xl bg-slate-900/90 text-slate-400 border border-slate-800 transition-all active:scale-95';
-        closeCheckout();
+        window.closeCheckout();
       }
     }
 
     // 5. RENDER MENU CARDS
     function renderMenu() {
-      // Combos
       const combosEl = document.getElementById('combosContainer');
       combosEl.innerHTML = COMBOS.map(c => {
         const qty = cart[c.id] || 0;
@@ -577,7 +620,6 @@
         `;
       }).join('');
 
-      // Addons
       const addonsEl = document.getElementById('addonsContainer');
       addonsEl.innerHTML = ADDONS.map(a => {
         const qty = cart[a.id] || 0;
@@ -614,15 +656,16 @@
     }
 
     // 6. CHECKOUT MODAL
-    function openCheckout() {
+    window.openCheckout = function openCheckout() {
       if (getCartTotalCount() === 0) return;
       renderModalItems();
+      document.getElementById('submitErrorBox').classList.add('hidden');
       document.getElementById('checkoutModal').classList.remove('hidden');
-    }
+    };
 
-    function closeCheckout() {
+    window.closeCheckout = function closeCheckout() {
       document.getElementById('checkoutModal').classList.add('hidden');
-    }
+    };
 
     function renderModalItems() {
       const container = document.getElementById('modalCartItems');
@@ -648,7 +691,7 @@
       `).join('');
     }
 
-    function handlePaymentChange(method) {
+    window.handlePaymentChange = function handlePaymentChange(method) {
       paymentMethod = method;
       const fLabel = document.getElementById('optFonepayLabel');
       const cLabel = document.getElementById('optCashLabel');
@@ -660,102 +703,160 @@
         cLabel.className = 'flex items-start gap-3 p-3 rounded-xl border border-[#E50914] bg-red-950/30 text-white cursor-pointer';
         fLabel.className = 'flex items-start gap-3 p-3 rounded-xl border border-slate-800 bg-slate-950/60 text-slate-400 cursor-pointer';
       }
-    }
+    };
 
-    // 7. ORDER CONFIRMATION
-    function submitOrder() {
-      if (getCartTotalCount() === 0) return;
-      playChime();
+    // 7. ORDER CONFIRMATION -> WRITE TO FIRESTORE
+    window.submitOrder = async function submitOrder() {
+      if (getCartTotalCount() === 0 || isSubmitting) return;
+      isSubmitting = true;
+      const btn = document.getElementById('confirmOrderBtn');
+      const btnText = document.getElementById('confirmOrderBtnText');
+      const errorBox = document.getElementById('submitErrorBox');
+      btn.disabled = true;
+      btnText.textContent = 'Sending to Canteen...';
+      errorBox.classList.add('hidden');
 
       const orderNumber = Math.floor(1000 + Math.random() * 9000);
+      const ticketId = 'EC-' + orderNumber;
+      const randomPart = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+      const docId = (ticketId + '-' + randomPart).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+      const cleanSeat = currentSeat.replace(/[^a-zA-Z0-9 _-]/g, '').trim().slice(0, 32) || 'Seat F-12';
+      const noteInput = document.getElementById('orderNoteInput');
+      const cleanNote = (noteInput ? noteInput.value : '').trim().slice(0, 200);
+
       const itemsList = Object.entries(cart).map(([id, qty]) => ({
         item: ALL_ITEMS.find(x => x.id === id),
         qty
-      })).filter(x => x.item);
+      })).filter(x => x.item).slice(0, 10);
 
-      activeOrder = {
-        id: '#EC-' + orderNumber,
-        seat: currentSeat,
-        items: itemsList,
-        timeRemaining: 300 // 5 minutes
-      };
+      const boundedItems = itemsList.map(({ item, qty }) => ({
+        id: item.id.slice(0, 40),
+        name: item.name.slice(0, 80),
+        quantity: Math.max(1, Math.min(50, Math.floor(qty)))
+      }));
+      const itemCount = Math.max(1, Math.min(200, boundedItems.reduce((acc, x) => acc + x.quantity, 0)));
+      const orderPath = 'orders/' + docId;
 
-      cart = {};
-      renderMenu();
-      updateCartBar();
-      closeCheckout();
-
-      document.getElementById('bannerTicketId').textContent = 'Ticket ' + activeOrder.id;
-      document.getElementById('bannerSeat').textContent = activeOrder.seat;
-      document.getElementById('activeOrderBanner').classList.remove('hidden');
-
-      document.getElementById('ticketIdDisplay').textContent = activeOrder.id;
-      document.getElementById('ticketSeatDisplay').textContent = 'Screen 1 • ' + activeOrder.seat;
-      document.getElementById('ticketFooterSeat').textContent = activeOrder.seat;
-
-      document.getElementById('ticketItemsList').innerHTML = itemsList.map(({ item, qty }) => `
-        <div class="flex justify-between">
-          <span>${qty}x ${item.name}</span>
-          <span class="text-slate-400 font-mono">Ordered</span>
-        </div>
-      `).join('');
-
-      openConfirmationModal();
-
-      if (countdownInterval) clearInterval(countdownInterval);
-      countdownInterval = setInterval(() => {
-        if (!activeOrder || activeOrder.timeRemaining <= 0) {
-          clearInterval(countdownInterval);
-          return;
+      try {
+        try {
+          await setDoc(doc(db, 'orders', docId), {
+            ticketId,
+            seat: cleanSeat,
+            screen: 'Screen 1',
+            items: boundedItems,
+            itemCount,
+            paymentMethod,
+            note: cleanNote,
+            status: 'pending',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        } catch (err) {
+          handleFirestoreError(err, 'create', orderPath);
         }
-        activeOrder.timeRemaining -= 1;
-        const m = Math.floor(activeOrder.timeRemaining / 60);
-        const s = activeOrder.timeRemaining % 60;
-        const formatted = `${m}:${s < 10 ? '0' : ''}${s}`;
-        document.getElementById('ticketCountdown').textContent = formatted + ' mins';
-        document.getElementById('bannerCountdown').textContent = formatted;
 
-        const progressPercent = Math.max(10, ((300 - activeOrder.timeRemaining) / 300) * 100);
-        document.getElementById('ticketProgressBar').style.width = progressPercent + '%';
-      }, 1000);
-    }
+        window.playChime();
 
-    function openConfirmationModal() {
+        activeOrder = {
+          id: ticketId,
+          docId,
+          seat: cleanSeat,
+          items: itemsList,
+          timeRemaining: 300
+        };
+
+        cart = {};
+        if (noteInput) noteInput.value = '';
+        renderMenu();
+        updateCartBar();
+        window.closeCheckout();
+
+        document.getElementById('bannerTicketId').textContent = 'Ticket ' + activeOrder.id;
+        document.getElementById('bannerSeat').textContent = activeOrder.seat;
+        document.getElementById('activeOrderBanner').classList.remove('hidden');
+
+        document.getElementById('ticketIdDisplay').textContent = activeOrder.id;
+        document.getElementById('ticketSeatDisplay').textContent = 'Screen 1 • ' + activeOrder.seat;
+        document.getElementById('ticketFooterSeat').textContent = activeOrder.seat;
+
+        document.getElementById('ticketItemsList').innerHTML = itemsList.map(({ item, qty }) => `
+          <div class="flex justify-between">
+            <span>${qty}x ${item.name}</span>
+            <span class="text-slate-400 font-mono">Ordered</span>
+          </div>
+        `).join('');
+
+        window.openConfirmationModal();
+
+        if (activeOrderUnsubscribe) activeOrderUnsubscribe();
+        activeOrderUnsubscribe = onSnapshot(
+          doc(db, 'orders', docId),
+          () => {},
+          (error) => {
+            handleFirestoreError(error, 'get', orderPath);
+          }
+        );
+
+        if (countdownInterval) clearInterval(countdownInterval);
+        countdownInterval = setInterval(() => {
+          if (!activeOrder || activeOrder.timeRemaining <= 0) {
+            clearInterval(countdownInterval);
+            return;
+          }
+          activeOrder.timeRemaining -= 1;
+          const m = Math.floor(activeOrder.timeRemaining / 60);
+          const s = activeOrder.timeRemaining % 60;
+          const formatted = `${m}:${s < 10 ? '0' : ''}${s}`;
+          document.getElementById('ticketCountdown').textContent = formatted + ' mins';
+          document.getElementById('bannerCountdown').textContent = formatted;
+
+          const progressPercent = Math.max(10, ((300 - activeOrder.timeRemaining) / 300) * 100);
+          document.getElementById('ticketProgressBar').style.width = progressPercent + '%';
+        }, 1000);
+      } catch {
+        errorBox.textContent = 'Could not reach canteen right now. Please try again.';
+        errorBox.classList.remove('hidden');
+      } finally {
+        isSubmitting = false;
+        btn.disabled = false;
+        btnText.textContent = 'Confirm & Send to Canteen';
+      }
+    };
+
+    window.openConfirmationModal = function openConfirmationModal() {
       document.getElementById('confirmationOverlay').classList.remove('hidden');
-    }
+    };
 
-    function closeConfirmation() {
+    window.closeConfirmation = function closeConfirmation() {
       document.getElementById('confirmationOverlay').classList.add('hidden');
-    }
+    };
 
     // 8. SEAT SWITCHER
-    function openSeatModal() {
+    window.openSeatModal = function openSeatModal() {
       document.getElementById('seatModal').classList.remove('hidden');
-    }
+    };
 
-    function closeSeatModal() {
+    window.closeSeatModal = function closeSeatModal() {
       document.getElementById('seatModal').classList.add('hidden');
-    }
+    };
 
-    function selectSeat(seatCode) {
+    window.selectSeat = function selectSeat(seatCode) {
       currentSeat = 'Seat ' + seatCode;
       updateSeatUI();
-      closeSeatModal();
-    }
+      window.closeSeatModal();
+    };
 
-    function saveCustomSeat() {
+    window.saveCustomSeat = function saveCustomSeat() {
       const val = document.getElementById('customSeatInput').value.trim();
       if (val) {
         currentSeat = val.toUpperCase().startsWith('SEAT') ? val.toUpperCase() : 'Seat ' + val.toUpperCase();
         updateSeatUI();
       }
-      closeSeatModal();
-    }
+      window.closeSeatModal();
+    };
 
-    window.addEventListener('DOMContentLoaded', () => {
-      initSeatFromURL();
-      renderMenu();
-    });
+    initSeatFromURL();
+    renderMenu();
   </script>
 </body>
 </html>

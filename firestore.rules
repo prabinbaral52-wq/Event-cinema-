@@ -1,0 +1,120 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: default deny everything
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HARDENED HELPERS ---
+    function isValidId(id) {
+      return id is string && id.size() >= 16 && id.size() <= 64 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isValidOrderItem(item) {
+      return item is map
+        && item.keys().hasAll(['id', 'name', 'quantity'])
+        && item.keys().hasOnly(['id', 'name', 'quantity'])
+        && item.id is string && item.id.size() >= 1 && item.id.size() <= 40
+        && item.name is string && item.name.size() >= 1 && item.name.size() <= 80
+        && item.quantity is int && item.quantity >= 1 && item.quantity <= 50;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll([
+          'ticketId', 'seat', 'screen', 'items', 'itemCount',
+          'paymentMethod', 'note', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ticketId', 'seat', 'screen', 'items', 'itemCount',
+          'paymentMethod', 'note', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.ticketId is string && data.ticketId.size() == 7 && data.ticketId.matches('^EC-[0-9]{4}$')
+        && data.seat is string && data.seat.size() >= 1 && data.seat.size() <= 32 && data.seat.matches('^[a-zA-Z0-9 _\\-]+$')
+        && data.screen is string && data.screen.size() >= 1 && data.screen.size() <= 32
+        && data.items is list && data.items.size() >= 1 && data.items.size() <= 10
+        && isValidOrderItem(data.items[0])
+        && data.itemCount is int && data.itemCount >= 1 && data.itemCount <= 200
+        && data.paymentMethod is string && data.paymentMethod in ['fonepay', 'cash']
+        && data.note is string && data.note.size() <= 200
+        && data.status is string && data.status in ['pending', 'preparing', 'delivered', 'cancelled']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStatusTransition() {
+      return (existing().status == 'pending' && incoming().status in ['preparing', 'delivered', 'cancelled'])
+        || (existing().status == 'preparing' && incoming().status in ['delivered', 'cancelled']);
+    }
+
+    function hasImmutableOrderFields() {
+      return incoming().ticketId == existing().ticketId
+        && incoming().seat == existing().seat
+        && incoming().screen == existing().screen
+        && incoming().items == existing().items
+        && incoming().itemCount == existing().itemCount
+        && incoming().paymentMethod == existing().paymentMethod
+        && incoming().note == existing().note
+        && incoming().createdAt == existing().createdAt;
+    }
+
+    // Admins lookup collection (read-only for verified self)
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && request.auth.token.email_verified == true && request.auth.uid == adminId;
+      allow list, write: if false;
+    }
+
+    // Cinema Concession Orders
+    // Customers place orders via QR scan without sign-in; Canteen Receiver App listens in real time.
+    match /orders/{orderId} {
+      // Single-document lookup requires a high-entropy valid ID (used by customer's live ticket)
+      allow get: if isValidId(orderId);
+
+      // Bounded list access for Canteen Receiver App (no PII stored in orders)
+      allow list: if isAdmin() || request.query.limit == null || request.query.limit <= 200;
+
+      // Customer creates a new order in 'pending' state with server timestamps
+      allow create: if isValidId(orderId)
+        && isValidOrder(incoming())
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      // Canteen updates status forward; terminal states ('delivered', 'cancelled') are locked unless admin
+      allow update: if isValidId(orderId)
+        && isValidOrder(incoming())
+        && (
+          isAdmin()
+          || (
+            !(existing().status in ['delivered', 'cancelled'])
+            && isValidStatusTransition()
+            && hasImmutableOrderFields()
+            && incoming().updatedAt == request.time
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isAdmin();
+    }
+  }
+}

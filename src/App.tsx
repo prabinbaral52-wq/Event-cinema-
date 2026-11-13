@@ -17,11 +17,12 @@ import {
   ArrowRight,
   MapPin,
   Volume2,
-  QrCode
+  QrCode,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
-import { ref, push, set } from 'firebase/database';
-import { db } from './firebase';
-
+import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from './firebase';
 
 // High-fidelity generated imagery
 import superComboImg from './assets/images/super_combo_popcorn_nachos_1794148566116.jpg';
@@ -121,11 +122,15 @@ export default function App() {
   const [orderInstructions, setOrderInstructions] = useState('');
 
   // Order Ticket & Confirmation State
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [activeOrder, setActiveOrder] = useState<{
     id: string;
+    docId: string;
     seat: string;
     items: CartItem[];
     payment: 'fonepay' | 'cash';
+    status: 'pending' | 'preparing' | 'delivered' | 'cancelled';
     timestamp: string;
     timeRemaining: number;
   } | null>(null);
@@ -196,7 +201,36 @@ export default function App() {
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [activeOrder?.id]);
+  }, [activeOrder?.docId]);
+
+  // Real-time Firestore listener for active order status from Canteen App
+  useEffect(() => {
+    if (!activeOrder?.docId) return;
+    const orderPath = `orders/${activeOrder.docId}`;
+    const orderRef = doc(db, 'orders', activeOrder.docId);
+
+    const unsubscribe = onSnapshot(
+      orderRef,
+      (snapshot) => {
+        if (!snapshot.exists()) return;
+        const data = snapshot.data();
+        const nextStatus = data.status;
+        if (
+          nextStatus === 'pending' ||
+          nextStatus === 'preparing' ||
+          nextStatus === 'delivered' ||
+          nextStatus === 'cancelled'
+        ) {
+          setActiveOrder(prev => (prev ? { ...prev, status: nextStatus } : null));
+        }
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, orderPath);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [activeOrder?.docId]);
 
   // Cart operations
   const addToCart = (item: MenuItem) => {
@@ -229,47 +263,82 @@ export default function App() {
   const cartItemsList = useMemo(() => Object.values(cart), [cart]);
   const cartTotalItems = useMemo(() => cartItemsList.reduce((acc, c) => acc + c.quantity, 0), [cartItemsList]);
 
-  // Handle Order Submit
+  // Sanitize helpers matching firebase-blueprint.json & firestore.rules
+  const sanitizeSeatLabel = (rawSeat: string): string => {
+    const cleaned = rawSeat.replace(/[^a-zA-Z0-9 _-]/g, '').trim().slice(0, 32);
+    return cleaned.length > 0 ? cleaned : 'Seat F-12';
+  };
+
+  const generateOrderDocId = (ticketId: string): string => {
+    const randomPart = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+    return `${ticketId}-${randomPart}`.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+  };
+
+  // Handle Order Submit -> Write to Firestore for Canteen App Receiver
   const handleConfirmOrder = async () => {
-    if (cartItemsList.length === 0) return;
-    playCanteenChime();
+    if (cartItemsList.length === 0 || isSubmitting) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
 
     const randomTicketNumber = Math.floor(1000 + Math.random() * 9000);
-    const orderId = `EC-${randomTicketNumber}`;
+    const ticketId = `EC-${randomTicketNumber}`;
+    const docId = generateOrderDocId(ticketId);
+    const cleanSeat = sanitizeSeatLabel(seatNumber);
+    const cleanNote = orderInstructions.trim().slice(0, 200);
+    const boundedItems = cartItemsList.slice(0, 10).map(({ item, quantity }) => ({
+      id: item.id.slice(0, 40),
+      name: item.name.slice(0, 80),
+      quantity: Math.max(1, Math.min(50, Math.floor(quantity))),
+    }));
+    const totalCount = Math.max(
+      1,
+      Math.min(200, boundedItems.reduce((sum, entry) => sum + entry.quantity, 0))
+    );
 
-    const newOrder = {
-      id: orderId,
-      seat: seatNumber,
-      items: cartItemsList.map(c => ({
-        name: c.item.name,
-        quantity: c.quantity
-      })),
-      payment: paymentMethod,
-      timestamp: Date.now(),
-      status: 'new',
-      instructions: orderInstructions || ''
-    };
+    const orderPath = `orders/${docId}`;
 
     try {
-      const ordersRef = ref(db, 'orders');
-      const newOrderRef = push(ordersRef);
-      await set(newOrderRef, newOrder);
-      console.log('Order sent to canteen:', orderId);
-    } catch (err) {
-      console.error('Failed to send order:', err);
-    }
+      try {
+        await setDoc(doc(db, 'orders', docId), {
+          ticketId,
+          seat: cleanSeat,
+          screen: 'Screen 1',
+          items: boundedItems,
+          itemCount: totalCount,
+          paymentMethod,
+          note: cleanNote,
+          status: 'pending',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, orderPath);
+      }
 
-    setActiveOrder({
-      id: orderId,
-      seat: seatNumber,
-      items: [...cartItemsList],
-      payment: paymentMethod,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      timeRemaining: 300,
-    });
-    setCart({});
-    setIsCheckoutOpen(false);
-    setShowConfirmation(true);
+      playCanteenChime();
+
+      const newOrder = {
+        id: ticketId,
+        docId,
+        seat: cleanSeat,
+        items: [...cartItemsList],
+        payment: paymentMethod,
+        status: 'pending' as const,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        timeRemaining: 300, // 5 minutes in seconds
+      };
+
+      setActiveOrder(newOrder);
+      setCart({});
+      setOrderInstructions('');
+      setIsCheckoutOpen(false);
+      setShowConfirmation(true);
+    } catch {
+      setSubmitError('Could not reach canteen right now. Please check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Quick format helper for countdown MM:SS
@@ -370,10 +439,28 @@ export default function App() {
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-bold text-white tracking-wide">Ticket {activeOrder.id}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/50 text-red-300 font-semibold">Prep In-Progress</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                    activeOrder.status === 'delivered'
+                      ? 'bg-emerald-900/60 text-emerald-300'
+                      : activeOrder.status === 'preparing'
+                      ? 'bg-amber-900/60 text-amber-300'
+                      : activeOrder.status === 'cancelled'
+                      ? 'bg-slate-800 text-slate-400'
+                      : 'bg-red-900/50 text-red-300'
+                  }`}>
+                    {activeOrder.status === 'delivered'
+                      ? 'Delivered'
+                      : activeOrder.status === 'preparing'
+                      ? 'Preparing Now'
+                      : activeOrder.status === 'cancelled'
+                      ? 'Cancelled'
+                      : 'Sent to Canteen'}
+                  </span>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Runner arrives in ~<span className="text-amber-300 font-bold font-mono">{formatSeconds(activeOrder.timeRemaining)}</span> to {activeOrder.seat}
+                  {activeOrder.status === 'delivered'
+                    ? `Enjoy your snacks at ${activeOrder.seat}!`
+                    : <>Runner arrives in ~<span className="text-amber-300 font-bold font-mono">{formatSeconds(activeOrder.timeRemaining)}</span> to {activeOrder.seat}</>}
                 </p>
               </div>
             </div>
@@ -809,12 +896,21 @@ export default function App() {
                 </label>
                 <input
                   type="text"
+                  maxLength={200}
                   placeholder="e.g., Less ice in coke, extra tissues"
                   value={orderInstructions}
                   onChange={e => setOrderInstructions(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#E50914]"
                 />
               </div>
+
+              {/* Error Banner */}
+              {submitError && (
+                <div className="mb-3 p-2.5 rounded-xl bg-red-950/60 border border-red-800/70 text-red-200 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{submitError}</span>
+                </div>
+              )}
 
               {/* Confirm Button */}
               <div className="pt-3 border-t border-slate-800/80 space-y-3">
@@ -825,11 +921,21 @@ export default function App() {
 
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={handleConfirmOrder}
-                  className="w-full py-3.5 bg-gradient-to-r from-[#E50914] to-[#B20710] hover:from-[#c70811] hover:to-[#96060c] active:scale-[0.98] text-white font-extrabold text-sm uppercase tracking-wider rounded-xl transition-all shadow-xl shadow-red-950/60 flex items-center justify-center gap-2"
+                  className="w-full py-3.5 bg-gradient-to-r from-[#E50914] to-[#B20710] hover:from-[#c70811] hover:to-[#96060c] disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98] text-white font-extrabold text-sm uppercase tracking-wider rounded-xl transition-all shadow-xl shadow-red-950/60 flex items-center justify-center gap-2"
                 >
-                  <UtensilsCrossed className="w-4 h-4" />
-                  <span>Confirm & Send to Canteen</span>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Sending to Canteen...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UtensilsCrossed className="w-4 h-4" />
+                      <span>Confirm & Send to Canteen</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -856,10 +962,20 @@ export default function App() {
               </div>
 
               <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-widest">
-                Order Received by Canteen
+                {activeOrder.status === 'delivered'
+                  ? 'Delivered to Seat'
+                  : activeOrder.status === 'preparing'
+                  ? 'Canteen Preparing Your Order'
+                  : activeOrder.status === 'cancelled'
+                  ? 'Order Cancelled'
+                  : 'Order Received by Canteen'}
               </span>
               <h2 className="text-xl font-black text-white mt-0.5">
-                Delivering to Your Seat!
+                {activeOrder.status === 'delivered'
+                  ? 'Enjoy Your Movie & Snacks!'
+                  : activeOrder.status === 'cancelled'
+                  ? 'Order Was Cancelled'
+                  : 'Delivering to Your Seat!'}
               </h2>
 
               {/* Cinema Ticket Card */}
@@ -978,6 +1094,7 @@ export default function App() {
               <div className="space-y-2">
                 <input
                   type="text"
+                  maxLength={32}
                   placeholder="Enter seat (e.g. F-12)"
                   value={tempSeat}
                   onChange={e => setTempSeat(e.target.value)}
