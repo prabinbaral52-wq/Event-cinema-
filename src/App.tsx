@@ -21,8 +21,8 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react';
-import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from './firebase';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { canteenDb, handleFirestoreError, OperationType } from './firebase';
 
 // High-fidelity generated imagery
 import superComboImg from './assets/images/super_combo_popcorn_nachos_1794148566116.jpg';
@@ -130,7 +130,7 @@ export default function App() {
     seat: string;
     items: CartItem[];
     payment: 'fonepay' | 'cash';
-    status: 'pending' | 'preparing' | 'delivered' | 'cancelled';
+    status: 'new' | 'preparing' | 'delivered' | 'cancelled';
     timestamp: string;
     timeRemaining: number;
   } | null>(null);
@@ -203,35 +203,6 @@ export default function App() {
     return () => clearInterval(interval);
   }, [activeOrder?.docId]);
 
-  // Real-time Firestore listener for active order status from Canteen App
-  useEffect(() => {
-    if (!activeOrder?.docId) return;
-    const orderPath = `orders/${activeOrder.docId}`;
-    const orderRef = doc(db, 'orders', activeOrder.docId);
-
-    const unsubscribe = onSnapshot(
-      orderRef,
-      (snapshot) => {
-        if (!snapshot.exists()) return;
-        const data = snapshot.data();
-        const nextStatus = data.status;
-        if (
-          nextStatus === 'pending' ||
-          nextStatus === 'preparing' ||
-          nextStatus === 'delivered' ||
-          nextStatus === 'cancelled'
-        ) {
-          setActiveOrder(prev => (prev ? { ...prev, status: nextStatus } : null));
-        }
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.GET, orderPath);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [activeOrder?.docId]);
-
   // Cart operations
   const addToCart = (item: MenuItem) => {
     setCart(prev => {
@@ -263,18 +234,19 @@ export default function App() {
   const cartItemsList = useMemo(() => Object.values(cart), [cart]);
   const cartTotalItems = useMemo(() => cartItemsList.reduce((acc, c) => acc + c.quantity, 0), [cartItemsList]);
 
-  // Sanitize helpers matching firebase-blueprint.json & firestore.rules
-  const sanitizeSeatLabel = (rawSeat: string): string => {
-    const cleaned = rawSeat.replace(/[^a-zA-Z0-9 _-]/g, '').trim().slice(0, 32);
-    return cleaned.length > 0 ? cleaned : 'Seat F-12';
+  // Sanitize seat into alphanumeric/hyphen 1-16 chars matching Canteen App firestore.rules
+  const sanitizeFirestoreSeat = (rawSeat: string): string => {
+    const withoutPrefix = rawSeat.replace(/^seat\s*/i, '').trim();
+    const cleaned = withoutPrefix
+      .replace(/\s+/g, '-')
+      .replace(/[^a-zA-Z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 16);
+    return cleaned.length > 0 ? cleaned : 'F-12';
   };
 
-  const generateOrderDocId = (ticketId: string): string => {
-    const randomPart = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
-    return `${ticketId}-${randomPart}`.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
-  };
-
-  // Handle Order Submit -> Write to Firestore for Canteen App Receiver
+  // Handle Order Submit -> Write to Canteen App Firestore database
   const handleConfirmOrder = async () => {
     if (cartItemsList.length === 0 || isSubmitting) return;
 
@@ -282,33 +254,30 @@ export default function App() {
     setSubmitError(null);
 
     const randomTicketNumber = Math.floor(1000 + Math.random() * 9000);
-    const ticketId = `EC-${randomTicketNumber}`;
-    const docId = generateOrderDocId(ticketId);
-    const cleanSeat = sanitizeSeatLabel(seatNumber);
-    const cleanNote = orderInstructions.trim().slice(0, 200);
-    const boundedItems = cartItemsList.slice(0, 10).map(({ item, quantity }) => ({
-      id: item.id.slice(0, 40),
-      name: item.name.slice(0, 80),
-      quantity: Math.max(1, Math.min(50, Math.floor(quantity))),
+    const orderCode = `ORD-${randomTicketNumber}`;
+    const docId = `ord-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+    const firestoreSeat = sanitizeFirestoreSeat(seatNumber);
+    const cleanNote = orderInstructions.trim().slice(0, 60);
+
+    const canteenItems = cartItemsList.slice(0, 20).map(({ item, quantity }, idx) => ({
+      name: (idx === 0 && cleanNote ? `${item.name} (${cleanNote})` : item.name).slice(0, 80),
+      qty: Math.max(1, Math.floor(quantity)),
+      price: 0,
     }));
-    const totalCount = Math.max(
-      1,
-      Math.min(200, boundedItems.reduce((sum, entry) => sum + entry.quantity, 0))
-    );
 
     const orderPath = `orders/${docId}`;
 
     try {
       try {
-        await setDoc(doc(db, 'orders', docId), {
-          ticketId,
-          seat: cleanSeat,
-          screen: 'Screen 1',
-          items: boundedItems,
-          itemCount: totalCount,
-          paymentMethod,
-          note: cleanNote,
-          status: 'pending',
+        await setDoc(doc(canteenDb, 'orders', docId), {
+          orderCode,
+          seat: firestoreSeat,
+          hall: 'Hall 1 / Screen 1',
+          items: canteenItems,
+          paymentType: paymentMethod === 'fonepay' ? 'digital' : 'cash',
+          totalAmount: 0,
+          status: 'new',
+          source: 'customer_qr',
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -319,12 +288,12 @@ export default function App() {
       playCanteenChime();
 
       const newOrder = {
-        id: ticketId,
+        id: orderCode,
         docId,
-        seat: cleanSeat,
+        seat: seatNumber,
         items: [...cartItemsList],
         payment: paymentMethod,
-        status: 'pending' as const,
+        status: 'new' as const,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         timeRemaining: 300, // 5 minutes in seconds
       };

@@ -2,51 +2,51 @@
   "entities": {
     "Order": {
       "title": "Order",
-      "description": "In-seat cinema concession order placed by a customer and sent to the canteen receiver.",
+      "description": "In-seat cinema concession order sent from Customer App to Canteen Receiver App.",
       "type": "object",
       "properties": {
-        "ticketId": {
+        "orderCode": {
           "type": "string",
-          "description": "Short display ticket code shown to customer and canteen (e.g. EC-4821)",
-          "minLength": 7,
-          "maxLength": 7,
-          "pattern": "^EC-[0-9]{4}$"
+          "description": "Display order code starting with ORD- (e.g. ORD-4821)",
+          "minLength": 5,
+          "maxLength": 16,
+          "pattern": "^ORD-[0-9]{4}$"
         },
         "seat": {
           "type": "string",
-          "description": "Cinema seat identifier extracted from QR code or seat selector",
+          "description": "Alphanumeric/hyphen cinema seat code (1-16 chars, e.g. F-12 or 12)",
           "minLength": 1,
-          "maxLength": 32,
-          "pattern": "^[a-zA-Z0-9 _-]+$"
+          "maxLength": 16,
+          "pattern": "^[a-zA-Z0-9-]+$"
         },
-        "screen": {
+        "hall": {
           "type": "string",
-          "description": "Auditorium screen identifier",
+          "description": "Cinema hall / screen label",
           "minLength": 1,
-          "maxLength": 32
+          "maxLength": 48
         },
         "items": {
           "type": "array",
-          "description": "Bounded list (1 to 10 entries) of ordered concession items with id, name, and quantity"
+          "description": "Bounded list (1-20 items) with { name, qty, price }"
         },
-        "itemCount": {
-          "type": "integer",
-          "description": "Total item quantity across all line items (1 to 200)"
-        },
-        "paymentMethod": {
+        "paymentType": {
           "type": "string",
-          "description": "Customer chosen payment method at seat",
-          "enum": ["fonepay", "cash"]
+          "description": "Selected payment method",
+          "enum": ["digital", "cash"]
         },
-        "note": {
-          "type": "string",
-          "description": "Optional special preparation instructions for the canteen",
-          "maxLength": 200
+        "totalAmount": {
+          "type": "number",
+          "description": "Numeric order total (0 - 100000)"
         },
         "status": {
           "type": "string",
-          "description": "Order fulfillment lifecycle state",
-          "enum": ["pending", "preparing", "delivered", "cancelled"]
+          "description": "Order fulfillment status ('new' on creation)",
+          "enum": ["new", "preparing", "delivered", "cancelled"]
+        },
+        "source": {
+          "type": "string",
+          "description": "Origin source identifier",
+          "maxLength": 32
         },
         "createdAt": {
           "type": "string",
@@ -60,13 +60,12 @@
         }
       },
       "required": [
-        "ticketId",
+        "orderCode",
         "seat",
-        "screen",
+        "hall",
         "items",
-        "itemCount",
-        "paymentMethod",
-        "note",
+        "paymentType",
+        "totalAmount",
         "status",
         "createdAt",
         "updatedAt"
@@ -78,7 +77,7 @@
       "schema": {
         "$ref": "#/entities/Order"
       },
-      "description": "Real-time cinema concession orders created by the Customer App (sender) and received by the Canteen App (receiver)."
+      "description": "Shared cinema orders collection in ai-studio-lalbandicinemaki-53df80ea-0bab-4f2c-a1a4-e67fee2366ed."
     }
   }
 }

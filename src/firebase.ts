@@ -3,8 +3,12 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
+export const CANTEEN_DATABASE_ID =
+  'ai-studio-lalbandicinemaki-53df80ea-0bab-4f2c-a1a4-e67fee2366ed';
+
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const canteenDb = getFirestore(app, CANTEEN_DATABASE_ID);
 export const auth = getAuth(app);
 
 export enum OperationType {
@@ -61,7 +65,7 @@ export function handleFirestoreError(
 
 async function testConnection() {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    await getDocFromServer(doc(canteenDb, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.error('Please check your Firebase configuration.');

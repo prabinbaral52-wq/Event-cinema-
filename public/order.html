@@ -370,7 +370,6 @@
       doc,
       setDoc,
       getDocFromServer,
-      onSnapshot,
       serverTimestamp
     } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
@@ -379,7 +378,7 @@
       appId: '1:670709095482:web:653f39e889390cdf95a903',
       apiKey: 'AIzaSyCXeMq_bJ2IxXqoAT1Z4azf-rqxuJIPdYU',
       authDomain: 'event-cinema.firebaseapp.com',
-      firestoreDatabaseId: 'ai-studio-eventcinemaslalb-5582b044-f3d4-4a51-b51b-e87f58413c06',
+      firestoreDatabaseId: 'ai-studio-lalbandicinemaki-53df80ea-0bab-4f2c-a1a4-e67fee2366ed',
       storageBucket: 'event-cinema.firebasestorage.app',
       messagingSenderId: '670709095482'
     };
@@ -717,37 +716,42 @@
       errorBox.classList.add('hidden');
 
       const orderNumber = Math.floor(1000 + Math.random() * 9000);
-      const ticketId = 'EC-' + orderNumber;
-      const randomPart = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
-      const docId = (ticketId + '-' + randomPart).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
-      const cleanSeat = currentSeat.replace(/[^a-zA-Z0-9 _-]/g, '').trim().slice(0, 32) || 'Seat F-12';
+      const orderCode = 'ORD-' + orderNumber;
+      const docId = 'ord-' + Date.now() + '-' + Math.floor(100 + Math.random() * 900);
+      const cleanSeat = currentSeat
+        .replace(/^seat\s*/i, '')
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-zA-Z0-9-]/g, '')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 16) || 'F-12';
       const noteInput = document.getElementById('orderNoteInput');
-      const cleanNote = (noteInput ? noteInput.value : '').trim().slice(0, 200);
+      const cleanNote = (noteInput ? noteInput.value : '').trim().slice(0, 60);
 
       const itemsList = Object.entries(cart).map(([id, qty]) => ({
         item: ALL_ITEMS.find(x => x.id === id),
         qty
-      })).filter(x => x.item).slice(0, 10);
+      })).filter(x => x.item).slice(0, 20);
 
-      const boundedItems = itemsList.map(({ item, qty }) => ({
-        id: item.id.slice(0, 40),
-        name: item.name.slice(0, 80),
-        quantity: Math.max(1, Math.min(50, Math.floor(qty)))
+      const canteenItems = itemsList.map(({ item, qty }, idx) => ({
+        name: (idx === 0 && cleanNote ? item.name + ' (' + cleanNote + ')' : item.name).slice(0, 80),
+        qty: Math.max(1, Math.floor(qty)),
+        price: 0
       }));
-      const itemCount = Math.max(1, Math.min(200, boundedItems.reduce((acc, x) => acc + x.quantity, 0)));
       const orderPath = 'orders/' + docId;
 
       try {
         try {
           await setDoc(doc(db, 'orders', docId), {
-            ticketId,
+            orderCode,
             seat: cleanSeat,
-            screen: 'Screen 1',
-            items: boundedItems,
-            itemCount,
-            paymentMethod,
-            note: cleanNote,
-            status: 'pending',
+            hall: 'Hall 1 / Screen 1',
+            items: canteenItems,
+            paymentType: paymentMethod === 'fonepay' ? 'digital' : 'cash',
+            totalAmount: 0,
+            status: 'new',
+            source: 'customer_qr',
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
           });
@@ -758,9 +762,9 @@
         window.playChime();
 
         activeOrder = {
-          id: ticketId,
+          id: orderCode,
           docId,
-          seat: cleanSeat,
+          seat: currentSeat,
           items: itemsList,
           timeRemaining: 300
         };
@@ -787,15 +791,6 @@
         `).join('');
 
         window.openConfirmationModal();
-
-        if (activeOrderUnsubscribe) activeOrderUnsubscribe();
-        activeOrderUnsubscribe = onSnapshot(
-          doc(db, 'orders', docId),
-          () => {},
-          (error) => {
-            handleFirestoreError(error, 'get', orderPath);
-          }
-        );
 
         if (countdownInterval) clearInterval(countdownInterval);
         countdownInterval = setInterval(() => {
